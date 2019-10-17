@@ -8,5 +8,5 @@ tox
 ```
 
 Default tox env is `kopf` which installs latest kopf release from PyPI.
-Alternatively one can use `tox -ekopf-master` that will install kopf
+Alternatively one can use `tox -emaster` that will install kopf
 from HEAD of master branch on GitHub.
