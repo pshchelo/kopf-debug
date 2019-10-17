@@ -1,0 +1,7 @@
+apiVersion: zalando.org/v1alpha1
+kind: KopfDebug
+metadata:
+  name: debug
+  namespace: kopf-debug
+spec:
+  foo: bar
