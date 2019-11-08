@@ -3,8 +3,9 @@
 ## Usage
 
 ```
-kubectl apply -f deploy
+kubectl apply -f crd.yaml
 tox
+kubectl apply -f obj.yaml
 ```
 
 Default tox env is `kopf` which installs latest kopf release from PyPI.
