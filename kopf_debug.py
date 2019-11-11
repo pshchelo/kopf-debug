@@ -1,18 +1,28 @@
 import asyncio
 import functools
-import time
 
 import kopf
 
-N_HANDLERS=5
+
+N_HANDLERS = 5
+
 
 @kopf.on.resume("zalando.org", "v1", "kopfexamples")
 @kopf.on.update("zalando.org", "v1", "kopfexamples")
 @kopf.on.create("zalando.org", "v1", "kopfexamples")
 async def ensure(body, logger, event, **kwargs):
-    fns = {s: functools.partial(dummy, s) for s in range(N_HANDLERS)}
-    await kopf.execute(fns=fns)
+    # fns = {s: functools.partial(dummy, s) for s in range(N_HANDLERS)}
+    # await kopf.execute(fns=fns)
+    fns = {asyncio.create_task(dummy(s, logger, event, **kwargs)): s
+           for s in range(N_HANDLERS)}
+    for f in asyncio.as_completed(fns.keys(), timeout=60):
+        try:
+            res = await f
+        except Exception as e:
+            raise e
+
     return {"message": f"{event}d"}
+
 
 async def dummy(s, logger, event, **kwargs):
     logger.info(f"Handler {s} handles event {event}")
