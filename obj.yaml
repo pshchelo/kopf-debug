@@ -5,14 +5,6 @@ kind: KopfExample
 metadata:
   name: kopf-example-1
   namespace: kopf
-  labels:
-    somelabel: somevalue
-  annotations:
-    someannotation: somevalue
 spec:
-  duration: 1m
   field: value
-  items:
-  - item1
-  - item2
 ...
