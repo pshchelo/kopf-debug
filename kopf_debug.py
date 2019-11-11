@@ -18,3 +18,5 @@ async def dummy(s, logger, event, **kwargs):
     logger.info(f"Handler {s} handles event {event}")
     await asyncio.sleep(N_HANDLERS-s)
     logger.info(f"Handler {s} took {N_HANDLERS - s}s to complete")
+    if s == N_HANDLERS-1 and kwargs["retry"] == 0:
+        raise kopf.TemporaryError(f"Handler {s} has to retry")
