@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deploy
+  namespace: kopf
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: dummy
+  template:
+    metadata:
+      labels:
+        app: dummy
+    spec:
+      containers:
+        - name: noop
+          image: busybox
+          args:
+            - '/bin/sh'
+            - '-c'
+            - 'i=0; while true; do echo "$i: $(date)"; i=$((i+1)); sleep 1; done'

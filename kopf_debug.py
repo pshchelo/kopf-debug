@@ -7,9 +7,9 @@ import kopf
 N_HANDLERS = 5
 
 
-@kopf.on.resume("zalando.org", "v1", "kopfexamples")
-@kopf.on.update("zalando.org", "v1", "kopfexamples")
-@kopf.on.create("zalando.org", "v1", "kopfexamples")
+@kopf.on.resume("zalando.org", "v1", "kopfexamples", labels={"foo": "bar"})
+@kopf.on.update("zalando.org", "v1", "kopfexamples", labels={"foo": "bar"})
+@kopf.on.create("zalando.org", "v1", "kopfexamples", labels={"foo": "bar"})
 async def ensure(body, logger, event, **kwargs):
     # fns = {s: functools.partial(dummy, s) for s in range(N_HANDLERS)}
     # await kopf.execute(fns=fns)
