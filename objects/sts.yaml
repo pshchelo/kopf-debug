@@ -19,7 +19,7 @@ metadata:
   namespace: kopf
 spec:
   serviceName: test-sts
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: test-sts
