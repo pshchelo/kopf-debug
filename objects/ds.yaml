@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: test-ds
+  namespace: kopf
+spec:
+  selector:
+    matchLabels:
+      app: test-ds
+  template:
+    metadata:
+      labels:
+        app: test-ds
+    spec:
+      nodeSelector:
+        test-ds: enabled
+      containers:
+        - name: hello
+          image: monopole/hello:1

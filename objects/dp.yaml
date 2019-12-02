@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-dp
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: test-dp
+  template:
+    metadata:
+      labels:
+        app: test-dp
+    spec:
+      containers:
+        - name: hello
+          image: monopole/hello:1
