@@ -1,13 +1,14 @@
 from dataclasses import dataclass
 import logging
+from typing import Optional
 
 import kopf
 
 LOG = logging.getLogger(__name__)
 # Example of deployment status field
-# note that the 'observedGeneration' is changing almost like every second or
+# note that the 'status.observedGeneration' is changing almost like every second or
 # two so it is impractical to listen on it, that's why the example below only
-# subscribes for 'conditions' field and uses some heuristic to derive the cause
+# subscribes for 'status.conditions' field and uses some heuristic to derive the cause
 # of status change
 """
 {'observedGeneration': 265,
@@ -34,7 +35,7 @@ LOG = logging.getLogger(__name__)
 }
 """
 
-@dataclass
+@dataclass(frozen=True)
 class DeplCondition:
     status: str
     type: str
@@ -44,17 +45,47 @@ class DeplCondition:
     lastTransitionTime: str
 
 
+@dataclass(frozen=True)
+class StsStatus:
+    observedGeneration: int
+    replicas: int
+    readyReplicas: int
+    currentRevision: str
+    updateRevision: str  # optional?
+    collisionCount: int
+    updatedReplicas: int = 0
+    currentReplicas: int = 0
+
+@dataclass(frozen=True)
+class DsStatus:
+    currentNumberScheduled: int
+    numberMisscheduled: int
+    desiredNumberScheduled: int
+    numberReady: int
+    observedGeneration: int
+    numberAvailable: int
+    numberUnavailable: int = 0
+    updatedNumberScheduled: int = 0
+
+
 def ident(meta):
     name = meta["name"]
     application = meta.get("labels", {}).get("application", name)
     component = meta.get("labels", {}).get("component", name)
-    # single out prometheus-exported Deploymants
+    # single out prometheus-exported Deployments
     if application.startswith("prometheus") and component == "exporter":
         application = "prometheus-exporter"
+        # examples:
+        # name=openstack-barbican-rabbitmq-rabbitmq-exporter
+        # name=openstack-memcached-memcached-exporter
+        # name=prometheus-mysql-exporter
         prefix, component, *parts = name.split("-")
         if parts[0] == "rabbitmq" and component != "rabbitmq":
             component += "-rabbitmq"
     # single out rabbitmq StatefulSets
+    # examples:
+    # name=openstack-nova-rabbitmq-rabbitmq
+    # name=openstack-rabbitmq-rabbitmq
     elif application == "rabbitmq" and component == "server":
         prefix, service, *parts = name.split("-")
         if service != "rabbitmq":
@@ -62,6 +93,8 @@ def ident(meta):
             component = "rabbitmq"
     # single out openvswitch DaemonSets
     elif application == "openvswitch":
+        # example:
+        # name=openvswitch-db component=openvswitch-vswitchd-db
         component = "-".join(component.split("-")[1:])
 
     return application, component
@@ -69,7 +102,7 @@ def ident(meta):
 
 @kopf.on.field("apps", "v1", "deployments", field="status.conditions")
 async def dp(name, meta, new, **kwargs):
-    LOG.debug(f"{new}")
+    LOG.info(f"{new}")
     application, component = ident(meta)
     conds = [DeplCondition(**c) for c in new]
     for c in conds:
@@ -99,18 +132,49 @@ async def dp(name, meta, new, **kwargs):
 async def sts(name, meta, new, **kwargs):
     LOG.info(f"{new}")
     application, component = ident(meta)
+    st = StsStatus(**new)
     status = "Unknown"
+    if st.updateRevision:
+        # updating, created new ReplicaSet
+        if st.currentRevision == st.updateRevision:
+            if st.replicas == st.readyReplicas == st.currentReplicas:
+                status = "Ready"
+            else:
+                status = "Unhealthy"
+        else:
+            status = "Progressing"
+    else:
+        if st.replicas == st.readyReplicas == st.currentReplicas:
+            status = "Ready"
+        else:
+            status = "Unhealthy"
+    patch = {"health": {application: {component: status}}}
     LOG.info(
         f"[WATCH-ME] StatefulSet for {application}/{component} "
         f"is {status}"
     )
 
 
-@kopf.on.field("apps", "v1", "daemonsets", field="status.conditions")
+@kopf.on.field("apps", "v1", "daemonsets", field="status")
 async def ds(name, meta, new, **kwargs):
     LOG.info(f"{new}")
     application, component = ident(meta)
     status = "Unknown"
+    st = DsStatus(**new)
+    if (st.currentNumberScheduled ==
+        st.desiredNumberScheduled ==
+        st.numberReady ==
+        st.updatedNumberScheduled ==
+        st.numberAvailable):
+            if not st.numberMisscheduled:
+                status = "Ready"
+            else:
+                status = "Progressing"
+    elif st.updatedNumberScheduled < st.desiredNumberScheduled:
+        status = "Progressing"
+    elif st.numberReady < st.desiredNumberScheduled:
+        status = "Unhealthy"
+    patch = {"health": {application: {component: status}}}
     LOG.info(
         f"[WATCH-ME] DaemonSet for {application}/{component} "
         f"is {status}"
