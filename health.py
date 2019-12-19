@@ -129,29 +129,29 @@ async def dp(name, meta, new, **kwargs):
 
 
 @kopf.on.field("apps", "v1", "statefulsets", field="status")
-async def sts(name, meta, new, **kwargs):
+async def sts(name, meta, status, **kwargs):
+    LOG.info(f"kwargs are {kwargs.keys()}")
     LOG.info(f"{new}")
     application, component = ident(meta)
-    st = StsStatus(**new)
-    status = "Unknown"
+    st = StsStatus(**status)
+    sts_status = "Unknown"
     if st.updateRevision:
         # updating, created new ReplicaSet
         if st.currentRevision == st.updateRevision:
             if st.replicas == st.readyReplicas == st.currentReplicas:
-                status = "Ready"
+                sts_status = "Ready"
             else:
-                status = "Unhealthy"
+                sts_status = "Unhealthy"
         else:
-            status = "Progressing"
+            sts_status = "Progressing"
     else:
         if st.replicas == st.readyReplicas == st.currentReplicas:
-            status = "Ready"
+            sts_status = "Ready"
         else:
-            status = "Unhealthy"
-    patch = {"health": {application: {component: status}}}
+            sts_status = "Unhealthy"
     LOG.info(
         f"[WATCH-ME] StatefulSet for {application}/{component} "
-        f"is {status}"
+        f"is {sts_status}"
     )
 
 
@@ -159,23 +159,22 @@ async def sts(name, meta, new, **kwargs):
 async def ds(name, meta, new, **kwargs):
     LOG.info(f"{new}")
     application, component = ident(meta)
-    status = "Unknown"
     st = DsStatus(**new)
+    ds_status = "Unknown"
     if (st.currentNumberScheduled ==
         st.desiredNumberScheduled ==
         st.numberReady ==
         st.updatedNumberScheduled ==
         st.numberAvailable):
             if not st.numberMisscheduled:
-                status = "Ready"
+                ds_status = "Ready"
             else:
-                status = "Progressing"
+                ds_status = "Progressing"
     elif st.updatedNumberScheduled < st.desiredNumberScheduled:
-        status = "Progressing"
+        ds_status = "Progressing"
     elif st.numberReady < st.desiredNumberScheduled:
-        status = "Unhealthy"
-    patch = {"health": {application: {component: status}}}
+        ds_status = "Unhealthy"
     LOG.info(
         f"[WATCH-ME] DaemonSet for {application}/{component} "
-        f"is {status}"
+        f"is {ds_status}"
     )
