@@ -6,6 +6,7 @@ import time
 import kopf
 import pykube
 
+N_HANDLERS = 5
 
 api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 KopfChild = pykube.object_factory(api, "zalando.org/v1", "KopfChild")
@@ -18,16 +19,16 @@ KopfChild = pykube.object_factory(api, "zalando.org/v1", "KopfChild")
 @kopf.on.update("zalando.org", "v1", "kopfexamples")
 @kopf.on.create("zalando.org", "v1", "kopfexamples")
 async def ensure(body, logger, event, **kwargs):
-    fns = {"sleepy": sleepy}
+    fns = {s: functools.partial(sleepy, s) for s in range(N_HANDLERS)}
     await kopf.execute(fns=fns)
     return {"message": f"{event}d"}
 
 
-async def sleepy(logger, event, namespace, name, body, spec, **kwargs):
-    logger.info(f"Handling event {event}")
-    snooze = 10 * random.choice((0, 1))
-    if snooze:
-        logger.info(f"Will sleep for {snooze}s")
+async def sleepy(s, logger, event, namespace, name, body, spec, **kwargs):
+    logger.info(f"Handler {s} for event {event} with field {spec['field']}")
+    # snooze = 10 * random.choice((0, 1))
+    if event == "update" and s == 0 and spec['field'] == 'value1' and random.choice((True, False)):
+        # logger.info(f"Will sleep for {snooze}s")
         # await asyncio.sleep(snooze)
         # time.sleep(snooze)
         raise kopf.TemporaryError("BOOM!")
@@ -37,15 +38,16 @@ async def sleepy(logger, event, namespace, name, body, spec, **kwargs):
         "apiVersion": "zalando.org/v1",
         "spec": body["spec"],
         "metadata": {
-            "name": name,
-            "namespace": namespace,
+            "name": f"{name}.{s}",
         },
     }
     logger.info(f"Applying spec with value {spec['field']}")
     try:
-        child = KopfChild.objects(api).filter(namespace=namespace).get(name=name)
+        child = KopfChild.objects(api).filter(namespace=namespace).get(name=child_def["metadata"]["name"])
+        kopf.adopt(child_def, body)
         child.set_obj(child_def)
         child.update()
     except pykube.ObjectDoesNotExist:
         child = KopfChild(api, child_def)
+        kopf.adopt(child_def, body)
         child.create()
