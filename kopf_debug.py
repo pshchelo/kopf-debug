@@ -1,32 +1,51 @@
 import asyncio
 import functools
+import random
+import time
 
 import kopf
+import pykube
 
 
-N_HANDLERS = 5
+api = pykube.HTTPClient(pykube.KubeConfig.from_env())
+KopfChild = pykube.object_factory(api, "zalando.org/v1", "KopfChild")
 
 
-@kopf.on.resume("zalando.org", "v1", "kopfexamples", labels={"foo": "bar"})
-@kopf.on.update("zalando.org", "v1", "kopfexamples", labels={"foo": "bar"})
-@kopf.on.create("zalando.org", "v1", "kopfexamples", labels={"foo": "bar"})
+# @kopf.on.resume("zalando.org", "v1", "kopfexamples", labels={"foo": "bar"})
+# @kopf.on.update("zalando.org", "v1", "kopfexamples", labels={"foo": "bar"})
+# @kopf.on.create("zalando.org", "v1", "kopfexamples", labels={"foo": "bar"})
+# @kopf.on.resume("zalando.org", "v1", "kopfexamples")
+@kopf.on.update("zalando.org", "v1", "kopfexamples")
+@kopf.on.create("zalando.org", "v1", "kopfexamples")
 async def ensure(body, logger, event, **kwargs):
-    # fns = {s: functools.partial(dummy, s) for s in range(N_HANDLERS)}
-    # await kopf.execute(fns=fns)
-    fns = {asyncio.create_task(dummy(s, logger, event, **kwargs)): s
-           for s in range(N_HANDLERS)}
-    for f in asyncio.as_completed(fns.keys(), timeout=60):
-        try:
-            res = await f
-        except Exception as e:
-            raise e
-
+    fns = {"sleepy": sleepy}
+    await kopf.execute(fns=fns)
     return {"message": f"{event}d"}
 
 
-async def dummy(s, logger, event, **kwargs):
-    logger.info(f"Handler {s} handles event {event}")
-    await asyncio.sleep(N_HANDLERS-s)
-    logger.info(f"Handler {s} took {N_HANDLERS - s}s to complete")
-    if s == N_HANDLERS-1 and kwargs["retry"] == 0:
-        raise kopf.TemporaryError(f"Handler {s} has to retry")
+async def sleepy(logger, event, namespace, name, body, spec, **kwargs):
+    logger.info(f"Handling event {event}")
+    snooze = 10 * random.choice((0, 1))
+    if snooze:
+        logger.info(f"Will sleep for {snooze}s")
+        # await asyncio.sleep(snooze)
+        # time.sleep(snooze)
+        raise kopf.TemporaryError("BOOM!")
+
+    child_def = {
+        "kind": "KopfChild",
+        "apiVersion": "zalando.org/v1",
+        "spec": body["spec"],
+        "metadata": {
+            "name": name,
+            "namespace": namespace,
+        },
+    }
+    logger.info(f"Applying spec with value {spec['field']}")
+    try:
+        child = KopfChild.objects(api).filter(namespace=namespace).get(name=name)
+        child.set_obj(child_def)
+        child.update()
+    except pykube.ObjectDoesNotExist:
+        child = KopfChild(api, child_def)
+        child.create()
